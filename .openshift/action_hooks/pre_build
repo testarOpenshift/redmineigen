@@ -1,0 +1,48 @@
+#!/bin/bash
+# This is a simple script and will be executed on your CI system if
+# available.  Otherwise it will execute while your application is stopped
+# before the build step.  This script gets executed directly, so it
+# could be python, php, ruby, etc.
+
+
+function get_ruby_version() {
+  ver="ruby-1.9"
+
+  #  Use OPENSHIFT_RUBY_IDENT if we have it.
+  if [ -n "$OPENSHIFT_RUBY_IDENT" ]; then
+    ver=$(echo "$OPENSHIFT_RUBY_IDENT" | sed "s/[^:]*:ruby:\([^:]*\):.*/ruby-\1/")
+  fi
+
+  #  Use GEAR_TYPE if we have it.
+  [ -n "$OPENSHIFT_GEAR_TYPE" ]  &&  ver=$(echo "$OPENSHIFT_GEAR_TYPE")
+
+  #  Check existence of ruby-1.9 directory.
+  [ -d "$OPENSHIFT_HOMEDIR/ruby-1.9" ]  &&  ver="ruby-1.9"
+
+  echo "$ver"
+
+}  #  End of function  get_ruby_version.
+
+
+#
+#  main(): Add a Gemfile.lock from the specific version and replace the env
+#          variables for DB HOST, USERNAME and PASSWORD.
+#
+pushd "$OPENSHIFT_REPO_DIR" > /dev/null
+rbver=$(get_ruby_version)
+if [ "$rbver" = "ruby-1.8" ]; then
+  echo "  *ERROR*: Unsupported Ruby version ($rbver)."
+  echo "           Redmine requires Ruby version >= 1.9"
+  echo "  - Exiting build with error ..."
+  exit -1
+fi
+
+[ ! -f Gemfile.lock ] && cp -f "Gemfile.lock.$rbver" Gemfile.lock
+
+if [ -f config/database.yml ]; then
+   sed -i "s#\$OPENSHIFT_MYSQL_DB_HOST#$OPENSHIFT_MYSQL_DB_HOST#;          \
+           s#\$OPENSHIFT_MYSQL_DB_USERNAME#$OPENSHIFT_MYSQL_DB_USERNAME#;  \
+           s#\$OPENSHIFT_MYSQL_DB_PASSWORD#$OPENSHIFT_MYSQL_DB_PASSWORD#"  \
+          config/database.yml
+fi
+popd > /dev/null
